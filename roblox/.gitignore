@@ -1,0 +1,10 @@
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+node_modules/
+.env
+.idea/
+.vscode/
+
+sourcemap.json
