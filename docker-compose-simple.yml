@@ -1,0 +1,43 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: wikicards_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: dolibarr
+      MYSQL_USER: dolibarr
+      MYSQL_PASSWORD: dolibarrpassword
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+
+  dolibarr:
+    image: dolibarr/dolibarr:latest
+    container_name: wikicards_dolibarr
+    depends_on:
+      - mysql
+    environment:
+      DATABASE_HOST: mysql
+      DATABASE_USER: dolibarr
+      DATABASE_PASSWORD: dolibarrpassword
+      DATABASE_NAME: dolibarr
+      DOLI_DB_TYPE: mysqli
+      DOLI_INSTALL_AUTO: 1
+      DOLI_ADMIN_LOGIN: admin
+      DOLI_ADMIN_PASSWORD: adminpassword
+      DOLI_URL_ROOT: http://localhost:8080
+      PHP_INI_DATE_TIMEZONE: Europe/Paris
+    volumes:
+      - dolibarr_documents:/var/www/html/documents
+      - dolibarr_custom:/var/www/html/custom
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  dolibarr_documents:
+  dolibarr_custom:
