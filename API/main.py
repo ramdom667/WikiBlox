@@ -13,6 +13,7 @@ load_dotenv()
 # Import des routes
 from routes.cards import router as cards_router
 from routes.simple import router as simple_router
+from routes.dolibarr import router as dolibarr_router
 
 # Initialisation FastAPI
 app = FastAPI(
@@ -36,6 +37,7 @@ app.add_middleware(
 # Inclusion des routes
 app.include_router(cards_router)
 app.include_router(simple_router)
+app.include_router(dolibarr_router)
 
 
 @app.get("/")

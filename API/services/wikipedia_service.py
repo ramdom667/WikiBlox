@@ -268,7 +268,7 @@ class CardService:
         
         # 5. Version jeu
         game_ready = {
-            "card_id": f"WIKI_{article.pageid}_{list(monthly_views.keys())[-1]}",  # Dernier mois
+            "card_id": f"WIKI_{article.pageid}",  # ID unique sans mois
             "name": article.title,
             "description": article.description or article.extract[:100],
             "image": article.originalimage.get("source") if article.originalimage else article.thumbnail.get("source"),
