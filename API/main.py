@@ -119,35 +119,31 @@ if __name__ == "__main__":
     host = os.getenv("API_HOST", "0.0.0.0")
     reload = os.getenv("RELOAD", "true").lower() == "true"
     
-    print("=" * 60)
-    print("🚀 WIKICARDS API STRUCTURÉE")
-    print("=" * 60)
-    print(f"📡 URL: http://{host}:{port}")
-    print(f"📚 Documentation: http://{host}:{port}/docs")
-    print(f"⚙️  Configuration: http://{host}:{port}/config")
-    print()
-    print("📊 DONNÉES SUR 3 MOIS COMPLETS")
-    print("   → Juillet 2024")
-    print("   → Août 2024")
-    print("   → Septembre 2024")
-    print()
-    print("🎴 ENDPOINTS PRINCIPAUX:")
-    print("   /api/cards/random     → Carte avec rareté")
-    print("   /api/cards/title/Cat  → Recherche par titre")
-    print("   /api/cards/examples   → Exemples de titres")
-    print()
-    print("⚡ ENDPOINTS SIMPLES:")
-    print("   /api/wikipedia/random → Très rapide (sans rareté)")
-    print()
-    print("📁 ARCHITECTURE:")
-    print("   models/    → Modèles de données")
-    print("   services/  → Logique métier")
-    print("   routes/    → Endpoints API")
-    print("=" * 60)
-    print()
-    print("⚠️  IMPORTANT: Vérifiez le fichier .env")
-    print("   WIKIPEDIA_USER_AGENT doit contenir un VRAI email !")
-    print("=" * 60)
+    # Version minimaliste du lancement (sans emojis)
+    print("=== WikiCards API démarrée ===")
+    print(f"URL: http://{host}:{port}")
+    print(f"Docs: http://{host}:{port}/docs")
+    
+    # Vérification rapide des configurations
+    print("\nConfiguration:")
+    
+    # Dolibarr config
+    dolibarr_url = os.getenv("DOLIBARR_URL")
+    dolibarr_key = os.getenv("DOLIBARR_API_KEY")
+    if dolibarr_url and dolibarr_key and dolibarr_key != "your_dolibarr_api_key_here":
+        print("   Dolibarr: Connecté")
+    else:
+        print("   Dolibarr: Non configuré")
+    
+    # Wikipedia config
+    wikipedia_ua = os.getenv("WIKIPEDIA_USER_AGENT")
+    if wikipedia_ua and "example.com" not in wikipedia_ua:
+        print("   Wikipedia: User-Agent configuré")
+    else:
+        print("   Wikipedia: User-Agent REQUIS")
+    
+    print(f"   Période données: Juil-Août-Sept 2024")
+    print(f"   Reload: {'Activé' if reload else 'Désactivé'}")
     
     uvicorn.run(
         "main:app",
