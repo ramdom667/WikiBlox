@@ -2,34 +2,44 @@
 API WikiCards - Version structurée (3 mois de données)
 Architecture propre avec dossiers
 """
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 
 # Chargement des variables d'environnement
-load_dotenv()
+# override=True : le .env fait foi, même après un rechargement à chaud (reload)
+load_dotenv(override=True)
 
 # Import des routes
 from routes.cards import router as cards_router
 from routes.simple import router as simple_router
 from routes.dolibarr import router as dolibarr_router
+from routes.catalog import router as catalog_router
+from routes.boosters import router as boosters_router, players_router
+from security import require_admin_key
+
+# Swagger / ReDoc : désactivables en production (DOCS_ENABLED=false)
+DOCS_ENABLED = os.getenv("DOCS_ENABLED", "true").lower() == "true"
 
 # Initialisation FastAPI
 app = FastAPI(
-    title="WikiCards API Structurée",
-    description="Middleware structuré pour le jeu de cartes Wikipédia - Vues sur 3 mois",
-    version="6.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    title="WikiCards API",
+    description=(
+        "API du jeu WikiBlox : catalogue de cartes Wikipédia (Dolibarr), boosters et collections des joueurs Roblox.\n\n"
+        "Authentification : bouton **Authorize** puis la clé (en-tête `X-API-Key`)."
+    ),
+    version="7.0.0",
+    docs_url="/docs" if DOCS_ENABLED else None,
+    redoc_url="/redoc" if DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if DOCS_ENABLED else None
 )
 
-# CORS pour les appels frontend
+# CORS (Roblox n'en a pas besoin : les appels viennent du serveur de jeu)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -38,36 +48,34 @@ app.add_middleware(
 app.include_router(cards_router)
 app.include_router(simple_router)
 app.include_router(dolibarr_router)
+app.include_router(catalog_router)
+app.include_router(boosters_router)
+app.include_router(players_router)
 
 
 @app.get("/")
 async def root():
-    """Page d'accueil"""
+    """Page d'accueil (publique)"""
     return {
-        "message": "WikiCards API Structurée",
-        "version": "6.0.0",
-        "architecture": "modulaire avec dossiers",
-        "data_period": "3 derniers mois complets",
-        "docs": "/docs",
+        "message": "WikiCards API",
+        "version": "7.0.0",
+        "docs": "/docs" if DOCS_ENABLED else None,
         "health": "/health",
+        "auth": "En-tête X-API-Key (clé de jeu ou clé d'administration)",
         "endpoints": {
-            "cartes_completes": {
-                "random": "/api/cards/random",
-                "search": "/api/cards/title/{title}",
-                "examples": "/api/cards/examples",
-                "health": "/api/cards/health"
+            "jeu (clé de jeu)": {
+                "boosters": "GET /api/boosters",
+                "ouvrir": "POST /api/boosters/open",
+                "simuler": "GET /api/boosters/{type}/simulate",
+                "collection": "GET /api/players/{roblox_user_id}/collection"
             },
-            "simple": {
-                "random": "/api/wikipedia/random",
-                "search": "/api/wikipedia/title/{title}"
+            "admin (clé d'admin)": {
+                "catalogue": "/api/catalog/*",
+                "dolibarr": "/api/dolibarr/*",
+                "cartes": "/api/cards/*",
+                "wikipedia": "/api/wikipedia/*",
+                "config": "/config"
             }
-        },
-        "structure": {
-            "models/": "Modèles de données",
-            "services/": "Logique métier",
-            "routes/": "Endpoints API",
-            "utils/": "Fonctions utilitaires",
-            "docs/": "Documentation"
         }
     }
 
@@ -78,13 +86,13 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "wikicards-structured",
-        "version": "6.0.0",
+        "version": "7.0.0",
         "environment": os.getenv("ENVIRONMENT", "development"),
         "wikipedia_user_agent": os.getenv("WIKIPEDIA_USER_AGENT", "non configuré")
     }
 
 
-@app.get("/config")
+@app.get("/config", dependencies=[Depends(require_admin_key)])
 async def config():
     """Configuration de l'API (sans valeurs sensibles)"""
     return {

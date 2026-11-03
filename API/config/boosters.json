@@ -1,0 +1,18 @@
+{
+  "standard": {
+    "name": "Booster Standard",
+    "description": "5 cartes triées de la moins rare à la plus rare. La dernière carte est au minimum rare.",
+    "slots": [
+      {
+        "count": 4,
+        "label": "Cartes 1 à 4",
+        "weights": { "common": 60, "uncommon": 25, "rare": 10, "epic": 4, "legendary": 1 }
+      },
+      {
+        "count": 1,
+        "label": "Carte 5 : rare garantie",
+        "weights": { "rare": 75, "epic": 20, "legendary": 5 }
+      }
+    ]
+  }
+}

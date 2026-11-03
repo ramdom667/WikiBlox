@@ -1,13 +1,14 @@
 """
 Routes simples (sans rareté)
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import time
 
+from security import require_admin_key
 from services.wikipedia_service import WikipediaService
 
-router = APIRouter(prefix="/api/wikipedia", tags=["simple"])
+router = APIRouter(prefix="/api/wikipedia", tags=["simple"], dependencies=[Depends(require_admin_key)])
 wikipedia_service = WikipediaService()
 
 

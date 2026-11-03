@@ -1,0 +1,4 @@
+# Scripts exécutés sous Linux / dans les conteneurs : toujours en LF
+*.sh  text eol=lf
+*.php text eol=lf
+Dockerfile text eol=lf

@@ -1,14 +1,15 @@
 """
 Routes pour les cartes Wikipédi
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import time
 
+from security import require_admin_key
 from services.wikipedia_service import CardService
 from models.card import APIResponse
 
-router = APIRouter(prefix="/api/cards", tags=["cartes"])
+router = APIRouter(prefix="/api/cards", tags=["cartes"], dependencies=[Depends(require_admin_key)])
 card_service = CardService()
 
 

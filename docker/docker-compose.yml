@@ -1,0 +1,96 @@
+# Stack complète WikiBlox : MariaDB + Dolibarr + API WikiCards (+ tunnel Cloudflare)
+#
+#   Démarrer (local)          : docker compose -f docker/docker-compose.yml up -d --build
+#   Démarrer + mise en ligne  : docker compose -f docker/docker-compose.yml --profile tunnel up -d --build
+#   Arrêter (garde les données): docker compose -f docker/docker-compose.yml down
+#
+# Secrets : docker/.env (voir docker/.env.example) et API/.env
+# Seul le tunnel expose l'API sur Internet (https://wikiblox.omertilki.fr).
+# Dolibarr, MariaDB et l'API ne sont accessibles que depuis cette machine (127.0.0.1).
+name: wikiblox
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: dolibarr_mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-dolibarr}
+      MYSQL_DATABASE: dolibarr
+      MYSQL_USER: dolibarr
+      MYSQL_PASSWORD: ${DB_PASSWORD:-dolibarr}
+      MYSQL_INITDB_SKIP_TZINFO: 1
+    # utf8mb4 : autorise les emojis (sinon "Incorrect string value '\xF0\x9F...'")
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  dolibarr:
+    image: dolibarr/dolibarr:latest
+    container_name: dolibarr_app
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+    environment:
+      # L'image officielle attend les variables DOLI_DB_* (et non DATABASE_*)
+      DOLI_DB_HOST: mariadb
+      DOLI_DB_HOST_PORT: 3306
+      DOLI_DB_USER: dolibarr
+      DOLI_DB_PASSWORD: ${DB_PASSWORD:-dolibarr}
+      DOLI_DB_NAME: dolibarr
+      DOLI_DB_TYPE: mysqli
+      DOLI_INSTALL_AUTO: 1
+      DOLI_ADMIN_LOGIN: admin
+      DOLI_ADMIN_PASSWORD: ${DOLI_ADMIN_PASSWORD:-admin}
+      DOLI_URL_ROOT: "http://localhost:8080"
+      PHP_INI_DATE_TIMEZONE: Europe/Paris
+      PHP_MEMORY_LIMIT: 256M
+    volumes:
+      - dolibarr_data:/var/www/html/documents
+      - dolibarr_conf:/var/www/html/conf
+      - dolibarr_htdocs:/var/www/html/htdocs
+    restart: unless-stopped
+
+  api:
+    build: ../API
+    container_name: wikicards_api
+    depends_on:
+      - dolibarr
+    env_file: ../API/.env
+    environment:
+      # Dans Docker, l'API joint Dolibarr par le réseau interne
+      DOLIBARR_URL: http://dolibarr
+      DATA_DIR: /app/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - api_data:/app/data
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: wikiblox_tunnel
+    profiles: ["tunnel"]
+    depends_on:
+      - api
+    command: tunnel --no-autoupdate run
+    environment:
+      # À renseigner dans docker/.env (sinon le tunnel ne démarre pas)
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    restart: unless-stopped
+
+volumes:
+  mariadb_data:
+  dolibarr_data:
+  dolibarr_conf:
+  dolibarr_htdocs:
+  api_data:

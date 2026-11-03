@@ -10,6 +10,7 @@ class WikipediaArticle(BaseModel):
     """Données brutes d'un article Wikipédia"""
     pageid: int
     title: str
+    type: Optional[str] = None  # "standard", "disambiguation", ...
     extract: Optional[str] = ""
     description: Optional[str] = ""
     thumbnail: Optional[Dict] = None
