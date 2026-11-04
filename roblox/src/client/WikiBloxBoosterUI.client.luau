@@ -5,7 +5,7 @@
 --   ProbaBoosters:InvokeServer()           -> { success, boosters }
 --
 -- Le joueur ouvre l'écran avec le bouton "Booster" (à gauche de l'écran)
--- ou en s'approchant de l'orbe au centre du lobby (touche E).
+-- ou en s'approchant du booster géant au centre du lobby (touche E).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -484,9 +484,17 @@ end
 ------------------------------------------------------------------
 -- Ouvrir / fermer l'écran
 ------------------------------------------------------------------
+-- Cache le bouton de l'autre écran pendant que celui-ci est ouvert
+local function afficherAutreBouton(visible)
+	local autre = player.PlayerGui:FindFirstChild("WikiBloxCollectionUI")
+	local b = autre and autre:FindFirstChild("BoutonCollection")
+	if b then b.Visible = visible end
+end
+
 local function ouvrirEcran()
 	fond.Visible = true
 	boutonHud.Visible = false
+	afficherAutreBouton(false)
 	panneauProba.Visible = false
 	if not occupe then
 		viderCartes()
@@ -498,6 +506,7 @@ end
 local function fermerEcran()
 	fond.Visible = false
 	boutonHud.Visible = true
+	afficherAutreBouton(true)
 end
 
 boutonHud.Activated:Connect(ouvrirEcran)
@@ -512,17 +521,21 @@ fermerProba.Activated:Connect(function()
 	panneauProba.Visible = false
 end)
 
--- Interaction avec l'orbe au centre du lobby (créée côté client, visible uniquement par ce joueur)
+-- Interaction avec le booster géant au centre du lobby (ou le socle s'il n'y en a pas).
+-- L'invite est créée côté client : elle n'est visible que pour ce joueur.
 task.spawn(function()
 	local lobby = workspace:WaitForChild("WikiBloxLobby", 30)
-	local socle = lobby and lobby:FindFirstChild("SocleOrbe")
-	if not socle then return end
+	if not lobby then return end
+	local booster = lobby:WaitForChild("BoosterGeant", 10)
+	local support = (booster and booster:WaitForChild("Paquet", 10)) or lobby:FindFirstChild("SocleOrbe")
+	if not support then return end
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "PromptBooster"
 	prompt.ActionText = "Ouvrir un booster"
-	prompt.ObjectText = "Orbe du savoir"
-	prompt.MaxActivationDistance = 14
+	prompt.ObjectText = "Booster WikiBlox"
+	prompt.MaxActivationDistance = 20
 	prompt.RequiresLineOfSight = false
-	prompt.Parent = socle
+	prompt.HoldDuration = 0.2
+	prompt.Parent = support
 	prompt.Triggered:Connect(ouvrirEcran)
 end)

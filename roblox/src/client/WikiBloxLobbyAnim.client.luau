@@ -1,4 +1,4 @@
--- WikiBlox : animations du lobby (pages en orbite, cartes de rareté, orbe, portail)
+-- WikiBlox : animations du lobby (pages en orbite, cartes de rareté, orbe, portail, booster géant)
 local RunService = game:GetService("RunService")
 local lobby = workspace:WaitForChild("WikiBloxLobby")
 local CENTER = Vector3.new(0, 14, 0)
@@ -13,6 +13,10 @@ for _, m in ipairs(lobby:WaitForChild("Raretes"):GetChildren()) do
 	table.insert(cards, { part = c, base = c.Position })
 end
 
+-- Booster géant au centre (optionnel) : il tourne lentement et flotte
+local booster = lobby:WaitForChild("BoosterGeant", 5)
+local pivotBooster = booster and booster:GetPivot()
+
 local t = 0
 RunService.RenderStepped:Connect(function(dt)
 	t += dt
@@ -26,4 +30,8 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 	orb.Size = Vector3.one * (7 + math.sin(t * 2) * 0.3)
 	portal.Transparency = 0.35 + math.sin(t * 3) * 0.12
+	if booster and booster.Parent then
+		booster:PivotTo(CFrame.new(pivotBooster.Position + Vector3.new(0, math.sin(t * 1.4) * 0.35, 0))
+			* CFrame.Angles(0, t * 0.5, 0))
+	end
 end)
