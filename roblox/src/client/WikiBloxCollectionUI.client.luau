@@ -105,16 +105,8 @@ local gui = new("ScreenGui", {
 	Parent = player:WaitForChild("PlayerGui"),
 })
 
--- Bouton permanent, sous le bouton "Booster"
-local boutonHud = bouton({
-	Name = "BoutonCollection",
-	AnchorPoint = Vector2.new(0, 0.5),
-	Position = UDim2.new(0, 16, 0.5, 64),
-	Size = UDim2.fromOffset(150, 52),
-	Text = "📚 Collection",
-	Parent = gui,
-}, GOLD)
-new("UIStroke", { Thickness = 2, Color = NAVY, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = boutonHud })
+-- Bouton du HUD : voir src/shared/WikiBloxHUD (ajouté plus bas, une fois ouvrirEcran défini)
+local HUD = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WikiBloxHUD"))
 
 local fond = new("Frame", {
 	Name = "Fond",
@@ -558,27 +550,25 @@ end
 ------------------------------------------------------------------
 -- Ouvrir / fermer
 ------------------------------------------------------------------
--- Cache le bouton de l'autre écran pendant que celui-ci est ouvert
-local function afficherAutreBouton(visible)
-	local autre = player.PlayerGui:FindFirstChild("WikiBloxBoosterUI")
-	local b = autre and autre:FindFirstChild("BoutonBooster")
-	if b then b.Visible = visible end
-end
-
 local function ouvrirEcran()
 	fond.Visible = true
-	boutonHud.Visible = false
-	afficherAutreBouton(false)
+	HUD.afficher(false)
 	detail.Visible = false
 	task.spawn(chargerCollection) -- toujours à jour (nouvelles cartes après un booster)
 end
 
 local function fermerEcran()
 	fond.Visible = false
-	boutonHud.Visible = true
-	afficherAutreBouton(true)
+	HUD.afficher(true)
 end
 
-boutonHud.Activated:Connect(ouvrirEcran)
+HUD.ajouterBouton({
+	id = "Collection",
+	icone = "📚",
+	texte = "COLLECTION",
+	couleur = Color3.fromRGB(90, 170, 255),
+	ordre = 2,
+	raccourci = Enum.KeyCode.C,
+}, ouvrirEcran)
 boutonFermer.Activated:Connect(fermerEcran)
 majFiltres()
