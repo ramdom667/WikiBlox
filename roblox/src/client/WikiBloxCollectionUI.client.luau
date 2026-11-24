@@ -8,6 +8,7 @@
 --   }
 --
 -- Le joueur ouvre l'écran avec le bouton "Collection" (à gauche de l'écran, sous "Booster").
+-- Style commun : src/shared/WikiBloxStyle.luau
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,73 +16,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("WikiBloxRemotes")
 local collectionRemote = remotes:WaitForChild("MaCollection")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Style = require(Shared:WaitForChild("WikiBloxStyle"))
+local HUD = require(Shared:WaitForChild("WikiBloxHUD"))
 
-------------------------------------------------------------------
--- Style (identique à l'écran de booster)
-------------------------------------------------------------------
-local RARETES = {
-	common    = { nom = "COMMUNE",     couleur = Color3.fromRGB(175, 175, 185) },
-	uncommon  = { nom = "PEU COMMUNE", couleur = Color3.fromRGB(80, 200, 120) },
-	rare      = { nom = "RARE",        couleur = Color3.fromRGB(60, 140, 255) },
-	epic      = { nom = "ÉPIQUE",      couleur = Color3.fromRGB(170, 80, 255) },
-	legendary = { nom = "LÉGENDAIRE",  couleur = Color3.fromRGB(255, 190, 40) },
-}
+local C = Style.C
+local new, tween, texte = Style.new, Style.tween, Style.texte
+
 -- Filtres affichés, de la plus rare à la moins rare (comme le tri de l'API)
 local FILTRES = { "legendary", "epic", "rare", "uncommon", "common" }
-
-local NAVY = Color3.fromRGB(28, 34, 56)
-local NAVY_CLAIR = Color3.fromRGB(44, 52, 82)
-local GOLD = Color3.fromRGB(235, 188, 80)
-local BLANC = Color3.fromRGB(245, 242, 235)
-local GRIS = Color3.fromRGB(110, 110, 125)
-local ROUGE = Color3.fromRGB(255, 110, 110)
-
-local function infoRarete(id)
-	return RARETES[id] or RARETES.common
-end
-
-local function new(class, props, enfants)
-	local inst = Instance.new(class)
-	for k, v in pairs(props or {}) do
-		if k ~= "Parent" then inst[k] = v end
-	end
-	for _, enfant in ipairs(enfants or {}) do
-		enfant.Parent = inst
-	end
-	if props and props.Parent then inst.Parent = props.Parent end
-	return inst
-end
-
-local function coins(rayon)
-	return new("UICorner", { CornerRadius = UDim.new(0, rayon or 12) })
-end
-
-local function texte(props)
-	props.BackgroundTransparency = props.BackgroundTransparency or 1
-	props.Font = props.Font or Enum.Font.GothamBold
-	props.TextColor3 = props.TextColor3 or BLANC
-	if props.TextScaled == nil then props.TextScaled = true end
-	props.TextWrapped = true
-	return new("TextLabel", props)
-end
-
-local function bouton(props, couleur, couleurTexte)
-	props.BackgroundColor3 = couleur
-	props.AutoButtonColor = true
-	props.Font = props.Font or Enum.Font.GothamBlack
-	props.TextColor3 = couleurTexte or NAVY
-	props.TextScaled = true
-	return new("TextButton", props, { coins(10), new("UIPadding", {
-		PaddingTop = UDim.new(0.2, 0), PaddingBottom = UDim.new(0.2, 0),
-		PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8),
-	}) })
-end
-
-local function initialeDe(titre)
-	titre = (type(titre) == "string" and titre ~= "") and titre or "?"
-	local ok, code = pcall(utf8.codepoint, titre, 1)
-	return ok and string.upper(utf8.char(code)) or "?"
-end
 
 local function formaterNombre(n)
 	local s = tostring(math.floor(tonumber(n) or 0))
@@ -94,7 +37,7 @@ local function pluriel(n, singulier, plurielTexte)
 end
 
 ------------------------------------------------------------------
--- Interface
+-- Fenêtre
 ------------------------------------------------------------------
 local gui = new("ScreenGui", {
 	Name = "WikiBloxCollectionUI",
@@ -105,92 +48,85 @@ local gui = new("ScreenGui", {
 	Parent = player:WaitForChild("PlayerGui"),
 })
 
--- Bouton du HUD : voir src/shared/WikiBloxHUD (ajouté plus bas, une fois ouvrirEcran défini)
-local HUD = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WikiBloxHUD"))
-
-local fond = new("Frame", {
-	Name = "Fond",
-	Size = UDim2.fromScale(1, 1),
-	BackgroundColor3 = Color3.new(0, 0, 0),
-	BackgroundTransparency = 0.35,
-	Active = true, -- bloque les clics vers ce qu'il y a derrière
-	Visible = false,
-	Parent = gui,
+local F = Style.fenetre(gui, {
+	titre = "MA COLLECTION",
+	taille = UDim2.fromScale(0.92, 0.86),
+	max = Vector2.new(1000, 660),
 })
+local contenu = F.contenu
 
-local fenetre = new("Frame", {
-	Name = "Fenetre",
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.fromScale(0.92, 0.86),
-	BackgroundColor3 = NAVY,
-	Parent = fond,
-}, {
-	coins(18),
-	new("UIStroke", { Thickness = 3, Color = GOLD }),
-	new("UISizeConstraint", { MaxSize = Vector2.new(1000, 680) }),
-})
-
-texte({
-	Name = "Titre",
-	Position = UDim2.fromScale(0.04, 0.03),
-	Size = UDim2.fromScale(0.5, 0.08),
-	Text = "Ma collection",
-	TextColor3 = GOLD,
-	Font = Enum.Font.GothamBlack,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	Parent = fenetre,
-})
-
+-- En-tête : résumé + barre de progression par rareté, recherche à droite
 local resume = texte({
 	Name = "Resume",
-	Position = UDim2.fromScale(0.04, 0.115),
-	Size = UDim2.fromScale(0.5, 0.05),
+	Position = UDim2.fromScale(0, 0.03),
+	Size = UDim2.fromScale(0.56, 0.055),
 	Text = "",
-	Font = Enum.Font.Gotham,
+	Font = Style.POLICE_TITRE,
+	TextColor3 = C.blanc,
+	Contour = C.nuitFonce,
 	TextXAlignment = Enum.TextXAlignment.Left,
-	Parent = fenetre,
+	TailleMax = 24,
+	Parent = contenu,
+})
+local barreProgression = new("Frame", {
+	Name = "Progression",
+	Position = UDim2.fromScale(0, 0.1),
+	Size = UDim2.fromScale(0.56, 0.035),
+	BackgroundColor3 = C.nuitFonce,
+	ClipsDescendants = true,
+	Parent = contenu,
+}, {
+	Style.coins(UDim.new(1, 0)),
+	Style.contour(C.orFonce, 1.5, 0.3),
+	new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder }),
 })
 
-local recherche = new("TextBox", {
+local cadreRecherche = new("Frame", {
 	Name = "Recherche",
 	AnchorPoint = Vector2.new(1, 0),
-	Position = UDim2.new(0.96, 0, 0.11, 0),
-	Size = UDim2.fromScale(0.34, 0.06),
-	BackgroundColor3 = NAVY_CLAIR,
-	PlaceholderText = "🔍 Rechercher une carte…",
-	PlaceholderColor3 = Color3.fromRGB(150, 155, 175),
+	Position = UDim2.fromScale(1, 0.03),
+	Size = UDim2.fromScale(0.36, 0.1),
+	BackgroundColor3 = C.parchemin,
+	Parent = contenu,
+}, {
+	Style.coins(UDim.new(1, 0)),
+	Style.contour(C.orFonce, 2.5),
+	new("UISizeConstraint", { MaxSize = Vector2.new(340, 50) }),
+})
+Style.icone(new("Frame", {
+	AnchorPoint = Vector2.new(0, 0.5),
+	Position = UDim2.new(0, 14, 0.5, 0),
+	Size = UDim2.fromScale(0.56, 0.56),
+	SizeConstraint = Enum.SizeConstraint.RelativeYY,
+	BackgroundTransparency = 1,
+	Parent = cadreRecherche,
+}), "loupe", { contour = C.orFonce })
+local recherche = new("TextBox", {
+	Position = UDim2.new(0, 44, 0.18, 0),
+	Size = UDim2.new(1, -60, 0.64, 0),
+	BackgroundTransparency = 1,
+	PlaceholderText = "Rechercher une carte…",
+	PlaceholderColor3 = Color3.fromRGB(150, 130, 100),
 	Text = "",
 	ClearTextOnFocus = false,
-	Font = Enum.Font.Gotham,
-	TextColor3 = BLANC,
+	Font = Enum.Font.GothamMedium,
+	TextColor3 = C.encre,
 	TextScaled = true,
 	TextXAlignment = Enum.TextXAlignment.Left,
-	Parent = fenetre,
-}, { coins(8), new("UIPadding", {
-	PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
-	PaddingTop = UDim.new(0.2, 0), PaddingBottom = UDim.new(0.2, 0),
-}) })
+	Parent = cadreRecherche,
+}, { new("UITextSizeConstraint", { MaxTextSize = 20 }) })
 
-local boutonFermer = bouton({
-	Name = "Fermer",
-	AnchorPoint = Vector2.new(1, 0),
-	Position = UDim2.new(1, -10, 0, 10),
-	Size = UDim2.fromOffset(44, 44),
-	Text = "✕",
-	Parent = fenetre,
-}, NAVY_CLAIR, BLANC)
-
--- Barre de filtres par rareté
+-- Onglets « marque-pages » par rareté
 local barreFiltres = new("Frame", {
 	Name = "Filtres",
-	Position = UDim2.fromScale(0.04, 0.19),
-	Size = UDim2.fromScale(0.92, 0.065),
+	Position = UDim2.fromScale(0, 0.175),
+	Size = UDim2.fromScale(1, 0.075),
 	BackgroundTransparency = 1,
-	Parent = fenetre,
+	Parent = contenu,
 }, {
 	new("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		Padding = UDim.new(0, 8),
 	}),
@@ -199,73 +135,73 @@ local barreFiltres = new("Frame", {
 -- Grille des cartes
 local grille = new("ScrollingFrame", {
 	Name = "Grille",
-	Position = UDim2.fromScale(0.04, 0.28),
-	Size = UDim2.fromScale(0.92, 0.69),
+	Position = UDim2.fromScale(0, 0.28),
+	Size = UDim2.fromScale(1, 0.72),
 	BackgroundTransparency = 1,
 	BorderSizePixel = 0,
-	ScrollBarThickness = 6,
+	ScrollBarThickness = 7,
+	ScrollBarImageColor3 = C.or_,
 	ScrollingDirection = Enum.ScrollingDirection.Y,
 	AutomaticCanvasSize = Enum.AutomaticSize.Y,
 	CanvasSize = UDim2.new(),
-	Parent = fenetre,
+	Parent = contenu,
 }, {
 	new("UIGridLayout", {
-		CellSize = UDim2.fromOffset(124, 176),
-		CellPadding = UDim2.fromOffset(12, 12),
+		CellSize = UDim2.fromOffset(126, 180),
+		CellPadding = UDim2.fromOffset(14, 16),
 		HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}),
-	new("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6) }),
+	new("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10) }),
 })
 
-local message = texte({
-	Name = "Message",
+-- Message / état vide
+local vide = new("Frame", {
+	Name = "Vide",
 	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.6),
-	Size = UDim2.fromScale(0.8, 0.08),
+	Position = UDim2.fromScale(0.5, 0.62),
+	Size = UDim2.fromScale(0.7, 0.4),
+	BackgroundTransparency = 1,
+	Visible = false,
+	Parent = contenu,
+})
+local videIcone = new("Frame", {
+	AnchorPoint = Vector2.new(0.5, 0),
+	Position = UDim2.fromScale(0.5, 0),
+	Size = UDim2.fromScale(0.34, 0.34),
+	SizeConstraint = Enum.SizeConstraint.RelativeYY,
+	BackgroundTransparency = 1,
+	Parent = vide,
+})
+local videTexte = texte({
+	Position = UDim2.fromScale(0, 0.38),
+	Size = UDim2.fromScale(1, 0.25),
 	Text = "",
-	Font = Enum.Font.Gotham,
-	Parent = fenetre,
+	Font = Style.POLICE_TITRE,
+	TextColor3 = C.blanc,
+	Contour = C.nuitFonce,
+	TailleMax = 26,
+	Parent = vide,
+})
+local boutonPremierBooster = Style.bouton(vide, {
+	nom = "PremierBooster",
+	texte = "Ouvrir un booster",
+	icone = "booster",
+	couleur = C.or_,
+	ancre = Vector2.new(0.5, 0),
+	position = UDim2.fromScale(0.5, 0.7),
+	taille = UDim2.fromScale(0.5, 0.26),
+	max = Vector2.new(280, 58),
+	tailleTexte = 24,
 })
 
-------------------------------------------------------------------
--- Visuel d'une carte (utilisé dans la grille et dans le détail)
-------------------------------------------------------------------
-local function dessinerCarte(conteneur, carte)
-	local r = infoRarete(carte.rarity)
-
-	local bandeau = new("Frame", {
-		Size = UDim2.fromScale(1, 0.14),
-		BackgroundColor3 = r.couleur,
-		Parent = conteneur,
-	}, { coins(10) })
-	texte({ Size = UDim2.fromScale(1, 1), Text = r.nom, TextColor3 = NAVY, Font = Enum.Font.GothamBlack, Parent = bandeau })
-
-	local medaillon = new("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0.19),
-		Size = UDim2.fromScale(0.56, 0.56),
-		BackgroundColor3 = r.couleur,
-		Parent = conteneur,
-	}, { new("UIAspectRatioConstraint", { AspectRatio = 1 }), new("UICorner", { CornerRadius = UDim.new(1, 0) }) })
-	texte({ Size = UDim2.fromScale(1, 1), Text = initialeDe(carte.title), Font = Enum.Font.GothamBlack, Parent = medaillon })
-
-	texte({
-		Position = UDim2.fromScale(0.06, 0.62),
-		Size = UDim2.fromScale(0.88, 0.2),
-		Text = carte.title or "?",
-		TextColor3 = NAVY,
-		Font = Enum.Font.Merriweather,
-		Parent = conteneur,
-	})
-	texte({
-		Position = UDim2.fromScale(0.06, 0.84),
-		Size = UDim2.fromScale(0.88, 0.11),
-		Text = "x" .. formaterNombre(carte.copies or 1),
-		TextColor3 = GRIS,
-		Font = Enum.Font.GothamBlack,
-		Parent = conteneur,
-	})
+local function afficherVide(icone, message, couleur, avecBouton)
+	videIcone:ClearAllChildren()
+	Style.icone(videIcone, icone, { contour = C.nuitFonce, epaisseur = 3 })
+	videTexte.Text = message
+	videTexte.TextColor3 = couleur or C.blanc
+	boutonPremierBooster.Parent.Visible = avecBouton == true
+	vide.Visible = true
 end
 
 ------------------------------------------------------------------
@@ -274,87 +210,179 @@ end
 local detail = new("Frame", {
 	Name = "Detail",
 	Size = UDim2.fromScale(1, 1),
-	BackgroundColor3 = NAVY,
+	BackgroundColor3 = Color3.new(1, 1, 1),
 	Active = true, -- bloque les clics vers la grille en dessous
 	Visible = false,
 	ZIndex = 20,
-	Parent = fenetre,
-}, { coins(18) })
+	Parent = F.fenetre,
+}, { Style.coins(22), Style.degrade(C.nuitClair, C.nuitFonce) })
+local echelleDetail = new("UIScale", { Parent = detail })
 
-local boutonRetour = bouton({
-	Name = "Retour",
-	Position = UDim2.new(0, 14, 0, 12),
-	Size = UDim2.fromOffset(130, 42),
-	Text = "← Retour",
-	Font = Enum.Font.GothamBold,
-	Parent = detail,
-}, NAVY_CLAIR, BLANC)
+local boutonRetour = Style.bouton(detail, {
+	nom = "Retour",
+	texte = "← Retour",
+	couleur = C.nuitClair,
+	position = UDim2.fromOffset(22, 22),
+	taille = UDim2.fromOffset(140, 46),
+	tailleTexte = 22,
+})
+boutonRetour.Parent.ZIndex = 21
 
-local grandeCarte = new("Frame", {
-	Name = "Carte",
-	AnchorPoint = Vector2.new(0, 0.5),
-	Position = UDim2.fromScale(0.05, 0.55),
-	Size = UDim2.fromScale(0.3, 0.75),
-	BackgroundColor3 = BLANC,
-	Parent = detail,
-}, { coins(14), new("UIAspectRatioConstraint", { AspectRatio = 0.68 }) })
-local contourGrandeCarte = new("UIStroke", { Thickness = 5, Parent = grandeCarte })
-
-local infos = new("Frame", {
-	Name = "Infos",
-	Position = UDim2.fromScale(0.4, 0.15),
-	Size = UDim2.fromScale(0.55, 0.8),
+local zoneGrandeCarte = new("Frame", {
+	Name = "ZoneCarte",
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.25, 0.55),
+	Size = UDim2.fromScale(0.4, 0.74),
 	BackgroundTransparency = 1,
+	ZIndex = 21,
+	Parent = detail,
+}, { new("UIAspectRatioConstraint", { AspectRatio = 0.7 }) })
+
+local parchemin = new("Frame", {
+	Name = "Infos",
+	AnchorPoint = Vector2.new(1, 0.5),
+	Position = UDim2.new(1, -26, 0.55, 0),
+	Size = UDim2.fromScale(0.5, 0.78),
+	BackgroundColor3 = Color3.new(1, 1, 1),
+	ZIndex = 24, -- au-dessus des rayons de la grande carte
 	Parent = detail,
 }, {
-	new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10) }),
+	Style.coins(16),
+	Style.degrade(C.parchemin, C.parcheminFonce),
+	Style.contour(C.orFonce, 3),
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, 20), PaddingBottom = UDim.new(0, 16),
+		PaddingLeft = UDim.new(0, 22), PaddingRight = UDim.new(0, 22),
+	}),
 })
+local infos = new("ScrollingFrame", {
+	Size = UDim2.fromScale(1, 1),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	ScrollBarThickness = 5,
+	ScrollBarImageColor3 = C.orFonce,
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	CanvasSize = UDim2.new(),
+	ZIndex = 22,
+	Parent = parchemin,
+}, { new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 12) }) })
 
 local detailTitre = texte({
 	LayoutOrder = 1,
-	Size = UDim2.new(1, 0, 0.16, 0),
+	Size = UDim2.new(1, -8, 0, 0),
+	AutomaticSize = Enum.AutomaticSize.Y,
+	TextScaled = false,
+	TextSize = 30,
 	Text = "",
-	TextColor3 = GOLD,
-	Font = Enum.Font.Merriweather,
+	Font = Style.POLICE_LIVRE,
+	TextColor3 = C.encre,
 	TextXAlignment = Enum.TextXAlignment.Left,
+	ZIndex = 23,
 	Parent = infos,
 })
-local detailRarete = texte({
+local pastilleRarete = new("Frame", {
 	LayoutOrder = 2,
-	Size = UDim2.new(1, 0, 0.07, 0),
+	Size = UDim2.fromOffset(200, 30),
+	BackgroundColor3 = Color3.new(1, 1, 1),
+	ZIndex = 23,
+	Parent = infos,
+}, { Style.coins(UDim.new(1, 0)) })
+local degradePastille = Style.degrade(C.or_, C.orFonce)
+degradePastille.Parent = pastilleRarete
+local textePastille = texte({
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	Size = UDim2.fromScale(0.9, 0.7),
 	Text = "",
-	Font = Enum.Font.GothamBlack,
-	TextXAlignment = Enum.TextXAlignment.Left,
+	Font = Style.POLICE_TITRE,
+	TextColor3 = C.blanc,
+	Contour = C.encre,
+	ContourEpaisseur = 1.5,
+	ZIndex = 24,
+	Parent = pastilleRarete,
+})
+-- séparateur doré
+new("Frame", {
+	LayoutOrder = 3,
+	Size = UDim2.new(1, -8, 0, 2),
+	BackgroundColor3 = C.orFonce,
+	BackgroundTransparency = 0.4,
+	BorderSizePixel = 0,
+	ZIndex = 23,
 	Parent = infos,
 })
 local detailDescription = texte({
-	LayoutOrder = 3,
-	Size = UDim2.new(1, 0, 0, 0),
-	AutomaticSize = Enum.AutomaticSize.Y,
-	TextScaled = false,
-	TextSize = 18,
-	Text = "",
-	Font = Enum.Font.Gotham,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	TextYAlignment = Enum.TextYAlignment.Top,
-	Parent = infos,
-})
-local detailStats = texte({
 	LayoutOrder = 4,
-	Size = UDim2.new(1, 0, 0, 0),
+	Size = UDim2.new(1, -8, 0, 0),
 	AutomaticSize = Enum.AutomaticSize.Y,
 	TextScaled = false,
 	TextSize = 18,
-	RichText = true,
 	Text = "",
 	Font = Enum.Font.Gotham,
+	TextColor3 = C.encre,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextYAlignment = Enum.TextYAlignment.Top,
+	ZIndex = 23,
 	Parent = infos,
 })
--- Lien Wikipédia : Roblox ne peut pas ouvrir de lien externe, on l'affiche pour qu'il puisse être copié
-local detailLien = new("TextBox", {
+local rangeeStats = new("Frame", {
 	LayoutOrder = 5,
+	Size = UDim2.new(1, -8, 0, 54),
+	BackgroundTransparency = 1,
+	ZIndex = 23,
+	Parent = infos,
+}, { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }) })
+
+local function creerStat(ordre, libelle)
+	local cadre = new("Frame", {
+		LayoutOrder = ordre,
+		Size = UDim2.new(0.5, -5, 1, 0),
+		BackgroundColor3 = C.encre,
+		BackgroundTransparency = 0.88,
+		ZIndex = 23,
+		Parent = rangeeStats,
+	}, { Style.coins(12), Style.contour(C.orFonce, 1.5, 0.3) })
+	texte({
+		Position = UDim2.fromScale(0.06, 0.1),
+		Size = UDim2.fromScale(0.88, 0.38),
+		Text = libelle,
+		Font = Enum.Font.GothamBold,
+		TextColor3 = Color3.fromRGB(120, 95, 60),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 24,
+		Parent = cadre,
+	})
+	return texte({
+		Position = UDim2.fromScale(0.06, 0.45),
+		Size = UDim2.fromScale(0.88, 0.48),
+		Text = "",
+		Font = Style.POLICE_TITRE,
+		TextColor3 = C.encre,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 24,
+		Parent = cadre,
+	})
+end
+local statExemplaires = creerStat(1, "EXEMPLAIRES")
+local statVues = creerStat(2, "VUES WIKIPÉDIA")
+
+-- Lien Wikipédia : Roblox ne peut pas ouvrir de lien externe, on l'affiche pour qu'il puisse être copié
+local cadreLien = new("Frame", {
+	LayoutOrder = 6,
+	Size = UDim2.new(1, -8, 0, 0),
+	AutomaticSize = Enum.AutomaticSize.Y,
+	BackgroundColor3 = C.nuit,
+	BackgroundTransparency = 0.1,
+	ZIndex = 23,
+	Parent = infos,
+}, {
+	Style.coins(10),
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8),
+		PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
+	}),
+})
+local detailLien = new("TextBox", {
 	Size = UDim2.new(1, 0, 0, 0),
 	AutomaticSize = Enum.AutomaticSize.Y,
 	BackgroundTransparency = 1,
@@ -362,32 +390,44 @@ local detailLien = new("TextBox", {
 	ClearTextOnFocus = false,
 	TextWrapped = true,
 	TextSize = 15,
-	Font = Enum.Font.Gotham,
-	TextColor3 = Color3.fromRGB(140, 190, 255),
+	Font = Enum.Font.GothamMedium,
+	TextColor3 = Color3.fromRGB(150, 200, 255),
 	TextXAlignment = Enum.TextXAlignment.Left,
 	Text = "",
-	Parent = infos,
+	ZIndex = 24,
+	Parent = cadreLien,
 })
 
 local function afficherDetail(carte)
-	local r = infoRarete(carte.rarity)
-	for _, enfant in ipairs(grandeCarte:GetChildren()) do
-		if not enfant:IsA("UICorner") and not enfant:IsA("UIAspectRatioConstraint") and not enfant:IsA("UIStroke") then
-			enfant:Destroy()
-		end
+	local r = Style.rarete(carte.rarity)
+	zoneGrandeCarte:ClearAllChildren()
+	new("UIAspectRatioConstraint", { AspectRatio = 0.7, Parent = zoneGrandeCarte })
+	Style.halo(zoneGrandeCarte, r.couleur, carte.rarity == "legendary" and 14 or 9)
+	if carte.rarity == "legendary" then
+		Style.rayons(zoneGrandeCarte, r.clair, 12, 520)
 	end
-	dessinerCarte(grandeCarte, carte)
-	contourGrandeCarte.Color = r.couleur
+	local cadre = new("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 22,
+		Parent = zoneGrandeCarte,
+	})
+	Style.carte(cadre, carte, { mention = "x" .. formaterNombre(carte.copies or 1) })
 
 	detailTitre.Text = carte.title or "?"
-	detailRarete.Text = r.nom
-	detailRarete.TextColor3 = r.couleur
+	textePastille.Text = string.rep("★", r.etoiles) .. "  " .. r.nom
+	degradePastille.Color = ColorSequence.new(Style.eclaircir(r.couleur, 0.2), r.couleur)
+	textePastille:FindFirstChildOfClass("UIStroke").Color = Style.assombrir(r.couleur, 0.55)
 	detailDescription.Text = (carte.description and carte.description ~= "") and carte.description or "Pas de description."
-	detailStats.Text = ("<b>Exemplaires :</b> %s\n<b>Vues Wikipédia :</b> %s"):format(
-		formaterNombre(carte.copies or 1), formaterNombre(carte.total_views or 0))
-	detailLien.Text = carte.page_url or ""
-	detailLien.Visible = carte.page_url ~= nil
+	statExemplaires.Text = formaterNombre(carte.copies or 1)
+	statVues.Text = formaterNombre(carte.total_views or 0)
+	detailLien.Text = carte.page_url and carte.page_url or ""
+	cadreLien.Visible = carte.page_url ~= nil
+	infos.CanvasPosition = Vector2.zero
+
 	detail.Visible = true
+	echelleDetail.Scale = 0.85
+	tween(echelleDetail, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
 end
 
 boutonRetour.Activated:Connect(function()
@@ -416,40 +456,79 @@ local function cartesFiltrees()
 	return liste
 end
 
-local function rafraichirGrille()
+local function viderGrille()
 	for _, enfant in ipairs(grille:GetChildren()) do
 		if enfant:IsA("GuiObject") then enfant:Destroy() end
 	end
+end
 
+local function rafraichirGrille()
+	viderGrille()
 	local liste = cartesFiltrees()
 	if #liste == 0 then
 		if not collection or #(collection.cards or {}) == 0 then
-			message.Text = "Tu n'as encore aucune carte.\nOuvre ton premier booster !"
+			afficherVide("collection", "Ta collection est vide.\nOuvre ton premier booster !", C.blanc, true)
 		else
-			message.Text = "Aucune carte ne correspond."
+			afficherVide("loupe", "Aucune carte ne correspond.", C.parcheminFonce, false)
 		end
-		message.TextColor3 = BLANC
-		message.Visible = true
 		return
 	end
-	message.Visible = false
+	vide.Visible = false
 
 	for i, carte in ipairs(liste) do
-		local r = infoRarete(carte.rarity)
 		local case = new("TextButton", {
 			Name = "Carte",
 			LayoutOrder = i,
 			Text = "",
-			AutoButtonColor = true,
-			BackgroundColor3 = BLANC,
+			AutoButtonColor = false,
+			BackgroundTransparency = 1,
 			Parent = grille,
-		}, { coins(10), new("UIStroke", { Thickness = 3, Color = r.couleur, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }) })
-		dessinerCarte(case, carte)
+		})
+		local echelle = new("UIScale", { Parent = case })
+		Style.carte(case, carte, { mention = "x" .. formaterNombre(carte.copies or 1) })
+		case.MouseEnter:Connect(function()
+			tween(echelle, 0.15, { Scale = 1.07 }, Enum.EasingStyle.Back)
+			tween(case, 0.15, { Rotation = 2 })
+		end)
+		case.MouseLeave:Connect(function()
+			tween(echelle, 0.15, { Scale = 1 })
+			tween(case, 0.15, { Rotation = 0 })
+		end)
 		case.Activated:Connect(function()
 			afficherDetail(carte)
 		end)
+		-- apparition en cascade (seulement les premières, pour rester fluide)
+		if i <= 24 then
+			echelle.Scale = 0.5
+			task.delay(i * 0.025, function()
+				tween(echelle, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
+			end)
+		end
 	end
 	grille.CanvasPosition = Vector2.zero
+end
+
+local function majProgression()
+	barreProgression:ClearAllChildren()
+	new("UICorner", { CornerRadius = UDim.new(1, 0), Parent = barreProgression })
+	new("UIStroke", { Color = C.orFonce, Thickness = 1.5, Transparency = 0.3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = barreProgression })
+	new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Parent = barreProgression })
+	local s = collection and collection.summary
+	local total = s and s.unique_cards or 0
+	if total <= 0 then return end
+	for i, id in ipairs(Style.ORDRE) do
+		local n = s.by_rarity and s.by_rarity[id] and s.by_rarity[id].unique or 0
+		if n > 0 then
+			local segment = new("Frame", {
+				LayoutOrder = i,
+				Size = UDim2.fromScale(0, 1),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				BorderSizePixel = 0,
+				Parent = barreProgression,
+			}, { Style.degrade(Style.rarete(id).clair, Style.rarete(id).couleur) })
+			tween(segment, 0.6, { Size = UDim2.fromScale(n / total, 1) })
+		end
+	end
 end
 
 local function majFiltres()
@@ -462,29 +541,55 @@ local function majFiltres()
 		else
 			nombre = parRarete[id] and parRarete[id].unique or 0
 		end
-		local nom = id == "toutes" and "TOUTES" or infoRarete(id).nom
-		b.Text = ("%s (%d)"):format(nom, nombre)
-		local couleur = id == "toutes" and GOLD or infoRarete(id).couleur
-		b.BackgroundColor3 = selectionne and couleur or NAVY_CLAIR
-		b.TextColor3 = selectionne and NAVY or couleur
+		local r = id ~= "toutes" and Style.rarete(id) or nil
+		local couleur = r and r.couleur or C.or_
+		b.label.Text = (r and r.nom or "TOUTES") .. "  " .. tostring(nombre)
+		b.bouton.BackgroundColor3 = selectionne and couleur or C.nuitFonce
+		b.label.TextColor3 = selectionne and C.blanc or couleur
+		b.labelContour.Enabled = selectionne
+		b.labelContour.Color = Style.assombrir(couleur, 0.55)
+		b.contour.Color = couleur
+		b.contour.Thickness = selectionne and 3 or 1.5
+		tween(b.echelle, 0.2, { Scale = selectionne and 1.06 or 1 }, Enum.EasingStyle.Back)
 	end
 end
 
 local function creerFiltre(id, ordre)
-	local b = bouton({
+	local bouton = new("TextButton", {
 		Name = "Filtre_" .. id,
 		LayoutOrder = ordre,
 		Size = UDim2.new(1 / 6, -7, 1, 0),
+		BackgroundColor3 = C.nuitFonce,
+		AutoButtonColor = false,
 		Text = "",
-		Font = Enum.Font.GothamBold,
 		Parent = barreFiltres,
-	}, NAVY_CLAIR, BLANC)
-	b.Activated:Connect(function()
+	}, { Style.coins(UDim.new(1, 0)) })
+	local contour = Style.contour(C.or_, 1.5)
+	contour.Parent = bouton
+	local label = texte({
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.new(1, -14, 0.6, 0),
+		Text = "",
+		Font = Style.POLICE_TITRE,
+		TailleMax = 17,
+		Contour = C.nuitFonce,
+		ContourEpaisseur = 1.5,
+		Parent = bouton,
+	})
+	local echelle = new("UIScale", { Parent = bouton })
+	bouton.Activated:Connect(function()
 		filtre = (id ~= "toutes") and id or nil
 		majFiltres()
 		rafraichirGrille()
 	end)
-	boutonsFiltres[id] = b
+	boutonsFiltres[id] = {
+		bouton = bouton,
+		label = label,
+		labelContour = label:FindFirstChildOfClass("UIStroke"),
+		contour = contour,
+		echelle = echelle,
+	}
 end
 
 creerFiltre("toutes", 0)
@@ -502,15 +607,12 @@ end)
 ------------------------------------------------------------------
 local enChargement = false
 
+
 local function chargerCollection()
 	if enChargement then return end
 	enChargement = true
-	message.Text = "Chargement de ta collection…"
-	message.TextColor3 = BLANC
-	message.Visible = true
-	for _, enfant in ipairs(grille:GetChildren()) do
-		if enfant:IsA("GuiObject") then enfant:Destroy() end
-	end
+	viderGrille()
+	afficherVide("chargement", "Chargement de ta collection…", C.parcheminFonce, false)
 
 	local erreur = nil
 	for _ = 1, 3 do
@@ -529,9 +631,7 @@ local function chargerCollection()
 
 	enChargement = false
 	if erreur then
-		message.Text = erreur .. ", réessaie plus tard."
-		message.TextColor3 = ROUGE
-		message.Visible = true
+		afficherVide("alerte", erreur .. ", réessaie plus tard.", C.rouge, false)
 		return
 	end
 
@@ -543,6 +643,7 @@ local function chargerCollection()
 	else
 		resume.Text = "0 carte"
 	end
+	majProgression()
 	majFiltres()
 	rafraichirGrille()
 end
@@ -551,24 +652,34 @@ end
 -- Ouvrir / fermer
 ------------------------------------------------------------------
 local function ouvrirEcran()
-	fond.Visible = true
+	if F.fond.Visible then return end
 	HUD.afficher(false)
 	detail.Visible = false
+	Style.ouvrir(F)
 	task.spawn(chargerCollection) -- toujours à jour (nouvelles cartes après un booster)
 end
 
-local function fermerEcran()
-	fond.Visible = false
-	HUD.afficher(true)
+local function fermerEcran(apres)
+	Style.fermer(F, function()
+		HUD.afficher(true)
+		if apres then apres() end
+	end)
 end
 
 HUD.ajouterBouton({
 	id = "Collection",
-	icone = "📚",
+	icone = "collection",
 	texte = "COLLECTION",
-	couleur = Color3.fromRGB(90, 170, 255),
+	couleur = C.bleu,
 	ordre = 2,
 	raccourci = Enum.KeyCode.C,
 }, ouvrirEcran)
-boutonFermer.Activated:Connect(fermerEcran)
+F.fermer.Activated:Connect(function()
+	fermerEcran()
+end)
+boutonPremierBooster.Activated:Connect(function()
+	fermerEcran(function()
+		HUD.declencher("Booster")
+	end)
+end)
 majFiltres()
