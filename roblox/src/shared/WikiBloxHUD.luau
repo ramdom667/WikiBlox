@@ -1,40 +1,30 @@
--- WikiBlox : barre de boutons du HUD (à gauche de l'écran), partagée par les écrans Booster et Collection
+-- WikiBlox : barre de boutons du HUD (à gauche de l'écran), partagée par tous les écrans
+-- Direction artistique : voir roblox/DA.md et src/shared/WikiBloxStyle.luau
 --
 -- Utilisation (dans un LocalScript) :
 --   local HUD = require(ReplicatedStorage.Shared.WikiBloxHUD)
---   HUD.ajouterBouton({ id = "Booster", icone = "📦", texte = "BOOSTER", couleur = Color3...,
+--   HUD.ajouterBouton({ id = "Booster", icone = "booster", texte = "BOOSTER", couleur = Color3...,
 --                       ordre = 1, raccourci = Enum.KeyCode.B, pulse = true }, ouvrirEcran)
---   HUD.afficher(false) -- cache toute la barre (quand un écran est ouvert)
+--   HUD.afficher(false)            -- cache toute la barre (quand un écran est ouvert)
+--   HUD.declencher("Collection")   -- ouvre l'écran d'un autre bouton
+--   HUD.pastille("Quetes", 3)      -- pastille rouge « 3 » sur un bouton (nil pour l'enlever, "!" possible)
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
+local Style = require(script.Parent:WaitForChild("WikiBloxStyle"))
+local C = Style.C
+local new, tween = Style.new, Style.tween
+
 local HUD = {}
 
-local TAILLE = 76
-local NAVY_HAUT = Color3.fromRGB(58, 68, 112)
-local NAVY_BAS = Color3.fromRGB(20, 24, 42)
-local BLANC = Color3.fromRGB(245, 242, 235)
+local TAILLE = 78 -- taille d'un bouton (pixels)
 
 local barre = nil
 local raccourcis = {} -- [KeyCode] = fonction
-
-local function new(class, props, enfants)
-	local inst = Instance.new(class)
-	for k, v in pairs(props or {}) do
-		if k ~= "Parent" then inst[k] = v end
-	end
-	for _, enfant in ipairs(enfants or {}) do
-		enfant.Parent = inst
-	end
-	if props and props.Parent then inst.Parent = props.Parent end
-	return inst
-end
-
-local function tween(objet, duree, props, style)
-	TweenService:Create(objet, TweenInfo.new(duree, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
-end
+local rappels = {} -- [id] = fonction (pour HUD.declencher)
+local pastilles = {} -- [id] = { cadre, texte, echelle }
 
 local function obtenirBarre()
 	if barre and barre.Parent then
@@ -54,7 +44,7 @@ local function obtenirBarre()
 	barre = new("Frame", {
 		Name = "Barre",
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 14, 0.5, 0),
+		Position = UDim2.new(0, 16, 0.5, 0),
 		Size = UDim2.fromOffset(TAILLE, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
@@ -63,7 +53,7 @@ local function obtenirBarre()
 		new("UIListLayout", {
 			FillDirection = Enum.FillDirection.Vertical,
 			SortOrder = Enum.SortOrder.LayoutOrder,
-			Padding = UDim.new(0, 14),
+			Padding = UDim.new(0, 22),
 		}),
 	})
 	return barre
@@ -72,119 +62,159 @@ end
 -- Ajoute un bouton à la barre. Renvoie le bouton (TextButton).
 function HUD.ajouterBouton(options, rappel)
 	local parent = obtenirBarre()
-	local accent = options.couleur or Color3.fromRGB(235, 188, 80)
+	local accent = options.couleur or C.or_
+	local fonce = Style.assombrir(accent, 0.55)
 
-	-- Emplacement (contient l'ombre et le bouton)
+	-- Emplacement (bouton + son épaisseur)
 	local emplacement = new("Frame", {
 		Name = "Bouton" .. options.id,
 		LayoutOrder = options.ordre or 1,
-		Size = UDim2.fromOffset(TAILLE, TAILLE),
+		Size = UDim2.fromOffset(TAILLE, TAILLE + 6),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
+	local echelle = new("UIScale", { Parent = emplacement })
 
-	-- Ombre douce
+	-- Dessous coloré foncé : donne l'épaisseur « 3D »
 	new("Frame", {
-		Name = "Ombre",
-		Position = UDim2.fromOffset(0, 4),
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.55,
+		Name = "Dessous",
+		Position = UDim2.fromOffset(0, 6),
+		Size = UDim2.fromOffset(TAILLE, TAILLE),
+		BackgroundColor3 = Style.assombrir(accent, 0.45),
 		Parent = emplacement,
-	}, { new("UICorner", { CornerRadius = UDim.new(0, 18) }) })
+	}, { Style.coins(20), Style.contour(fonce, 3) })
 
+	-- Face du bouton : dégradé de la couleur d'accent, contour foncé + filet blanc intérieur
 	local bouton = new("TextButton", {
 		Name = "Bouton",
-		Size = UDim2.fromScale(1, 1),
+		Size = UDim2.fromOffset(TAILLE, TAILLE),
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		AutoButtonColor = false,
 		Text = "",
 		Parent = emplacement,
 	}, {
-		new("UICorner", { CornerRadius = UDim.new(0, 18) }),
-		new("UIGradient", { Rotation = 90, Color = ColorSequence.new(NAVY_HAUT, NAVY_BAS) }),
+		Style.coins(20),
+		Style.degrade(Style.eclaircir(accent, 0.3), accent),
+		Style.contour(fonce, 3),
 	})
-	local echelle = new("UIScale", { Parent = bouton })
-	local contour = new("UIStroke", {
-		Thickness = 2.5,
-		Color = accent,
-		Transparency = 0.2,
-		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	new("Frame", {
+		Name = "Filet",
+		Position = UDim2.fromOffset(4, 4),
+		Size = UDim2.new(1, -8, 1, -8),
+		BackgroundTransparency = 1,
 		Parent = bouton,
-	})
-
-	-- Reflet en haut du bouton
+	}, { Style.coins(16), Style.contour(C.blanc, 1.5, 0.55) })
+	-- reflet en haut
 	new("Frame", {
 		Name = "Reflet",
-		Position = UDim2.fromOffset(6, 5),
-		Size = UDim2.new(1, -12, 0.4, 0),
+		Position = UDim2.fromOffset(8, 6),
+		Size = UDim2.new(1, -16, 0.36, 0),
 		BackgroundColor3 = Color3.new(1, 1, 1),
-		BackgroundTransparency = 0.93,
+		BackgroundTransparency = 0.72,
 		BorderSizePixel = 0,
 		Parent = bouton,
-	}, { new("UICorner", { CornerRadius = UDim.new(0, 13) }) })
+	}, { Style.coins(12) })
 
-	-- Icône
-	new("TextLabel", {
+	-- Icône dessinée (voir Style.icone : "booster", "collection"…), sinon le texte donné
+	local iconeLabel = new("Frame", {
 		Name = "Icone",
-		Position = UDim2.fromScale(0, 0.07),
-		Size = UDim2.fromScale(1, 0.56),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.42),
+		Size = UDim2.fromScale(0.64, 0.64),
 		BackgroundTransparency = 1,
-		Text = options.icone or "?",
-		TextScaled = true,
-		Font = Enum.Font.GothamBold,
-		TextColor3 = BLANC,
+		ZIndex = 2,
 		Parent = bouton,
-	}, { new("UITextSizeConstraint", { MaxTextSize = 36 }) })
-
-	-- Libellé
-	new("TextLabel", {
-		Name = "Texte",
-		Position = UDim2.new(0, 4, 0.68, 0),
-		Size = UDim2.new(1, -8, 0.2, 0),
-		BackgroundTransparency = 1,
-		Text = options.texte or "",
-		TextScaled = true,
-		Font = Enum.Font.GothamBlack,
-		TextColor3 = accent,
-		Parent = bouton,
-	}, { new("UITextSizeConstraint", { MaxTextSize = 12 }) })
-
-	-- Pastille de raccourci clavier (cachée sur mobile)
-	if options.raccourci then
-		raccourcis[options.raccourci] = rappel
-		local pastille = new("Frame", {
-			Name = "Touche",
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, 7, 0, -7),
-			Size = UDim2.fromOffset(22, 22),
-			BackgroundColor3 = accent,
-			Visible = UserInputService.KeyboardEnabled,
-			ZIndex = 2,
-			Parent = emplacement,
-		}, {
-			new("UICorner", { CornerRadius = UDim.new(1, 0) }),
-			new("UIStroke", { Thickness = 2, Color = NAVY_BAS }),
-		})
-		new("TextLabel", {
+	})
+	if not Style.icone(iconeLabel, options.icone, { contour = fonce, epaisseur = 2.5 }) then
+		Style.texte({
 			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			Text = options.raccourci.Name,
-			TextScaled = true,
-			Font = Enum.Font.GothamBlack,
-			TextColor3 = NAVY_BAS,
+			Text = options.icone or "?",
+			Font = Style.POLICE_TITRE,
+			TextColor3 = C.blanc,
+			Contour = fonce,
 			ZIndex = 2,
-			Parent = pastille,
-		}, { new("UIPadding", {
-			PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4),
-			PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4),
-		}) })
+			Parent = iconeLabel,
+		})
 	end
 
-	-- Halo qui « respire » pour attirer l'œil (ex. bouton Booster)
+	-- Étiquette en bas du bouton, style cartoon (texte blanc contour foncé)
+	Style.texte({
+		Name = "Texte",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 1, -4),
+		Size = UDim2.new(1, 16, 0, 22),
+		Text = options.texte or "",
+		Font = Style.POLICE_TITRE,
+		TextColor3 = C.blanc,
+		Contour = fonce,
+		ContourEpaisseur = 2.5,
+		TailleMax = 17,
+		ZIndex = 3,
+		Parent = bouton,
+	})
+
+	-- Pastille de raccourci clavier (cachée sur mobile) : parchemin bordé d'or
+	if options.raccourci then
+		raccourcis[options.raccourci] = rappel
+		local touche = new("Frame", {
+			Name = "Touche",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(4, 4),
+			Size = UDim2.fromOffset(26, 26),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			Visible = UserInputService.KeyboardEnabled,
+			ZIndex = 4,
+			Parent = emplacement,
+		}, {
+			Style.coins(8),
+			Style.degrade(C.parchemin, C.parcheminFonce),
+			Style.contour(C.orFonce, 2),
+		})
+		Style.texte({
+			Size = UDim2.fromScale(1, 1),
+			Text = options.raccourci.Name,
+			Font = Style.POLICE_TITRE,
+			TextColor3 = C.encre,
+			ZIndex = 5,
+			Parent = touche,
+		})
+	end
+
+	-- Pastille rouge de notification (cachée par défaut, voir HUD.pastille)
+	local notif = new("Frame", {
+		Name = "Notification",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(1, -4, 0, 4),
+		Size = UDim2.fromOffset(26, 26),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		Visible = false,
+		ZIndex = 6,
+		Parent = emplacement,
+	}, {
+		Style.coins(UDim.new(1, 0)),
+		Style.degrade(Color3.fromRGB(255, 110, 105), C.rouge),
+		Style.contour(C.blanc, 2.5),
+	})
+	local notifTexte = Style.texte({
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.7, 0.7),
+		Text = "",
+		Font = Style.POLICE_TITRE,
+		TextColor3 = C.blanc,
+		ZIndex = 7,
+		Parent = notif,
+	})
+	pastilles[options.id] = { cadre = notif, texte = notifTexte, echelle = new("UIScale", { Parent = notif }) }
+
+	-- Le bouton « respire » doucement pour attirer l'œil (ex. bouton Booster)
+	local echelleRespire = new("UIScale", { Parent = bouton })
 	if options.pulse then
-		TweenService:Create(contour, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
-			Thickness = 4,
+		TweenService:Create(echelleRespire, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+			Scale = 1.06,
+		}):Play()
+		TweenService:Create(iconeLabel, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+			Rotation = -8,
 		}):Play()
 	end
 
@@ -192,22 +222,28 @@ function HUD.ajouterBouton(options, rappel)
 	local survol = false
 	bouton.MouseEnter:Connect(function()
 		survol = true
-		tween(echelle, 0.15, { Scale = 1.08 }, Enum.EasingStyle.Back)
-		tween(contour, 0.15, { Transparency = 0 })
+		tween(echelle, 0.18, { Scale = 1.1 }, Enum.EasingStyle.Back)
+		tween(emplacement, 0.18, { Rotation = -4 }, Enum.EasingStyle.Back)
 	end)
 	bouton.MouseLeave:Connect(function()
 		survol = false
 		tween(echelle, 0.15, { Scale = 1 })
-		tween(contour, 0.15, { Transparency = 0.2 })
+		tween(emplacement, 0.15, { Rotation = 0 })
+		tween(bouton, 0.1, { Position = UDim2.new() })
 	end)
 	bouton.MouseButton1Down:Connect(function()
-		tween(echelle, 0.08, { Scale = 0.93 })
+		tween(bouton, 0.06, { Position = UDim2.fromOffset(0, 5) })
 	end)
 	bouton.MouseButton1Up:Connect(function()
-		tween(echelle, 0.15, { Scale = survol and 1.08 or 1 }, Enum.EasingStyle.Back)
+		tween(bouton, 0.15, { Position = UDim2.new() }, Enum.EasingStyle.Back)
+		if not survol then
+			tween(echelle, 0.15, { Scale = 1 })
+			tween(emplacement, 0.15, { Rotation = 0 })
+		end
 	end)
 
 	if rappel then
+		rappels[options.id] = rappel
 		bouton.Activated:Connect(rappel)
 	end
 	return bouton
@@ -216,6 +252,32 @@ end
 -- Affiche ou cache toute la barre (on la cache quand un écran est ouvert)
 function HUD.afficher(visible)
 	obtenirBarre().Visible = visible
+end
+
+-- Ouvre l'écran d'un autre bouton (ex. « Voir ma collection » depuis l'écran Booster)
+function HUD.declencher(id)
+	local rappel = rappels[id]
+	if rappel then
+		task.spawn(rappel)
+		return true
+	end
+	return false
+end
+
+-- Pastille rouge sur un bouton : HUD.pastille("Quetes", 3) / HUD.pastille("Cadeau", "!") / HUD.pastille("Quetes", nil)
+function HUD.pastille(id, valeur)
+	local p = pastilles[id]
+	if not p then return end
+	if valeur == nil or valeur == 0 or valeur == false then
+		p.cadre.Visible = false
+		return
+	end
+	p.texte.Text = tostring(valeur)
+	if not p.cadre.Visible then
+		p.cadre.Visible = true
+		p.echelle.Scale = 0
+		tween(p.echelle, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
+	end
 end
 
 -- Raccourcis clavier (ignorés pendant la saisie dans le chat ou une zone de texte)
