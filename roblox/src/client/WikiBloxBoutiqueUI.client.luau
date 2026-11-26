@@ -10,6 +10,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local player = Players.LocalPlayer
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -65,10 +66,11 @@ local OFFRES = {
 		description = "Boosters 2 fois plus rapides et un titre doré.",
 		icone = "couronne",
 		couleur = C.violet,
-		prix = 199,
+		prix = 30,
 		monnaie = "robux",
+		gamePassId = 2099610569,
 		etiquette = "PREMIUM",
-		disponible = false,
+		disponible = true,
 	},
 }
 
@@ -166,8 +168,9 @@ local rangee = new("ScrollingFrame", {
 local cartesOffres = {} -- { echelle } pour l'animation d'apparition
 
 local function acheter(offre)
-	-- Pas encore d'économie : rien à faire (le bouton est grisé).
-	-- Plus tard : remotes.Acheter:InvokeServer(offre.id)
+	if offre.gamePassId then
+		MarketplaceService:PromptGamePassPurchase(player, offre.gamePassId)
+	end
 end
 
 local function creerOffre(offre, ordre)
@@ -330,23 +333,13 @@ local function creerOffre(offre, ordre)
 		Parent = prix,
 	})
 	if offre.monnaie == "robux" then
-		local pastille = new("Frame", {
-			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Color3.new(1, 1, 1),
-			ZIndex = 3,
-			Parent = symbole,
-		}, {
-			Style.coins(8),
-			Style.degrade(Color3.fromRGB(110, 215, 130), Color3.fromRGB(40, 150, 75)),
-			Style.contour(Color3.fromRGB(25, 90, 45), 2),
-		})
 		texte({
 			Size = UDim2.fromScale(1, 1),
-			Text = "R$",
-			Font = Style.POLICE_TITRE,
-			TextColor3 = C.blanc,
-			ZIndex = 4,
-			Parent = pastille,
+			Text = utf8.char(0xE002), -- icône Robux officielle
+			Font = Enum.Font.BuilderSansBold,
+			TextColor3 = C.encre,
+			ZIndex = 3,
+			Parent = symbole,
 		})
 	else
 		Style.icone(symbole, "piece", { contour = C.orFonce, epaisseur = 2 })
@@ -378,6 +371,25 @@ local function creerOffre(offre, ordre)
 	bouton.Activated:Connect(function()
 		if bouton.Active then acheter(offre) end
 	end)
+
+	-- Game pass : afficher « POSSÉDÉ » si le joueur l'a déjà (ou vient de l'acheter)
+	if offre.gamePassId then
+		local function marquerPossede()
+			labelBouton.Text = "POSSÉDÉ"
+			Style.activerBouton(bouton, false)
+		end
+		task.spawn(function()
+			local ok, possede = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, offre.gamePassId)
+			end)
+			if ok and possede then marquerPossede() end
+		end)
+		MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(joueur, id, achete)
+			if joueur == player and id == offre.gamePassId and achete then
+				marquerPossede()
+			end
+		end)
+	end
 
 	-- étiquette en biais (promo / premium)
 	if offre.etiquette then
