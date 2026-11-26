@@ -31,6 +31,8 @@ Style.C = {
 	rougeFonce = Color3.fromRGB(150, 35, 40),
 	bleu = Color3.fromRGB(80, 165, 255),
 	gris = Color3.fromRGB(140, 140, 155),
+	vert = Color3.fromRGB(60, 190, 110), -- acheter / réclamer
+	violet = Color3.fromRGB(150, 85, 240), -- premium / Robux
 }
 local C = Style.C
 
@@ -533,7 +535,7 @@ end
 ------------------------------------------------------------------
 -- Icônes dessinées (pas d'emojis) : Style.icone(cadre, "booster", { contour = couleur, epaisseur = 2 })
 -- Le cadre doit être carré (UIAspectRatioConstraint ou SizeConstraint RelativeYY).
--- Icônes : booster, collection, probabilites, loupe, chargement, alerte
+-- Icônes : booster, collection, probabilites, loupe, chargement, alerte, boutique, piece, couronne
 ------------------------------------------------------------------
 local VIOLET_CLAIR = Color3.fromRGB(165, 110, 250)
 local VIOLET_FONCE = Color3.fromRGB(85, 45, 165)
@@ -721,6 +723,133 @@ Style.ICONES.alerte = function(cadre, contour, ep)
 		ZIndex = cadre.ZIndex + 1,
 		Parent = rond,
 	})
+end
+
+-- Sac de boutique en papier kraft, anse foncée, pièce dorée devant
+Style.ICONES.boutique = function(cadre, contour, ep)
+	local z = cadre.ZIndex
+	-- anse (anneau dont le bas est caché par le sac)
+	local anse = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.45, 0.32),
+		Size = UDim2.fromScale(0.4, 0.42),
+		BackgroundTransparency = 1,
+		ZIndex = z,
+		Parent = cadre,
+	}, { Style.coins(UDim.new(1, 0)) })
+	new("UIStroke", { Color = contour, Thickness = ep + 3, Parent = anse })
+	-- sac
+	local sac = forme(cadre, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.45, 0.62),
+		Size = UDim2.fromScale(0.72, 0.6),
+		ZIndex = z + 1,
+	}, Color3.new(1, 1, 1), contour, ep, UDim.new(0.18, 0))
+	Style.degrade(C.parchemin, Color3.fromRGB(215, 165, 105)).Parent = sac
+	-- rabat du sac
+	forme(sac, {
+		Size = UDim2.fromScale(1, 0.24),
+		ZIndex = z + 2,
+	}, C.rouge, nil, nil, UDim.new(0.3, 0))
+	-- trous de l'anse
+	for _, x in ipairs({ 0.3, 0.7 }) do
+		forme(sac, {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(x, 0.12),
+			Size = UDim2.fromScale(0.12, 0.12),
+			SizeConstraint = Enum.SizeConstraint.RelativeXX,
+			ZIndex = z + 3,
+		}, contour, nil, nil, UDim.new(1, 0))
+	end
+	-- pièce dorée en bas à droite
+	local piece = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.76, 0.76),
+		Size = UDim2.fromScale(0.42, 0.42),
+		BackgroundTransparency = 1,
+		ZIndex = z + 4,
+		Parent = cadre,
+	})
+	Style.ICONES.piece(piece, contour, math.max(1, ep - 0.5))
+	etincelle(cadre, 0.14, 0.2, 0.26, C.blanc, contour)
+end
+
+-- Pièce d'or avec une étoile (monnaie du jeu)
+Style.ICONES.piece = function(cadre, contour, ep)
+	local z = cadre.ZIndex
+	local rond = forme(cadre, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.86, 0.86),
+		ZIndex = z,
+	}, Color3.new(1, 1, 1), contour, ep, UDim.new(1, 0))
+	Style.degrade(C.orClair, C.orFonce, 135).Parent = rond
+	local bord = forme(rond, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(0.72, 0.72),
+		BackgroundTransparency = 1,
+		ZIndex = z + 1,
+	}, C.or_, C.orFonce, math.max(1, ep - 0.5), UDim.new(1, 0))
+	bord.BackgroundTransparency = 1
+	Style.texte({
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.52),
+		Size = UDim2.fromScale(0.6, 0.6),
+		Text = "★",
+		Font = Style.POLICE_TITRE,
+		TextColor3 = C.blanc,
+		Contour = C.orFonce,
+		ContourEpaisseur = 1.5,
+		ZIndex = z + 2,
+		Parent = rond,
+	})
+end
+
+-- Couronne violette (VIP / premium)
+Style.ICONES.couronne = function(cadre, contour, ep)
+	local z = cadre.ZIndex
+	-- trois pointes (losanges)
+	for i, x in ipairs({ 0.2, 0.5, 0.8 }) do
+		local pointe = forme(cadre, {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(x, i == 2 and 0.36 or 0.42),
+			Size = UDim2.fromScale(0.3, 0.3),
+			Rotation = 45,
+			ZIndex = z,
+		}, Color3.new(1, 1, 1), contour, ep, UDim.new(0.15, 0))
+		Style.degrade(Color3.fromRGB(200, 160, 255), C.violet, 135).Parent = pointe
+		-- perle dorée au bout
+		forme(cadre, {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(x, i == 2 and 0.17 or 0.23),
+			Size = UDim2.fromScale(0.14, 0.14),
+			ZIndex = z + 3,
+		}, C.orClair, contour, math.max(1, ep - 1), UDim.new(1, 0))
+	end
+	-- base
+	local base = forme(cadre, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.64),
+		Size = UDim2.fromScale(0.84, 0.36),
+		ZIndex = z + 1,
+	}, Color3.new(1, 1, 1), contour, ep, UDim.new(0.2, 0))
+	Style.degrade(Color3.fromRGB(190, 145, 255), Color3.fromRGB(105, 55, 190)).Parent = base
+	-- bande dorée et gemme
+	forme(base, {
+		Position = UDim2.fromScale(0, 0.7),
+		Size = UDim2.fromScale(1, 0.3),
+		ZIndex = z + 2,
+	}, C.or_, nil, nil, UDim.new(0.3, 0))
+	forme(base, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.42),
+		Size = UDim2.fromScale(0.2, 0.2),
+		SizeConstraint = Enum.SizeConstraint.RelativeXX,
+		Rotation = 45,
+		ZIndex = z + 3,
+	}, C.rouge, contour, math.max(1, ep - 1), UDim.new(0.2, 0))
+	etincelle(cadre, 0.88, 0.08, 0.24, C.blanc, contour)
 end
 
 -- Dessine l'icône « nom » dans « cadre ». Renvoie true si l'icône existe.
