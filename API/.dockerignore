@@ -9,3 +9,5 @@ __pycache__/
 data/
 Dockerfile
 .dockerignore
+tests/
+requirements-dev.txt

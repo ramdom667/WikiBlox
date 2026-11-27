@@ -78,6 +78,7 @@ Toutes les routes exigent l'en-tête `X-API-Key`. Swagger est disponible sur htt
 | `GET /api/boosters` | Types de boosters et probabilités de chaque emplacement |
 | `POST /api/boosters/open` | Ouvre un booster, ajoute les cartes à la collection du joueur et les renvoie |
 | `GET /api/players/{userId}/collection` | Cartes possédées et nombre d'exemplaires |
+| `POST /api/players/{userId}/cards` | Donne **une** carte d'une rareté choisie par le jeu (pêche…) et l'ajoute à la collection |
 
 ### Ouvrir un booster
 
@@ -131,6 +132,46 @@ Chaque ouverture porte un identifiant unique (`HttpService:GenerateGUID(false)`)
 Si la requête échoue en route, par exemple sur un timeout alors que l'API a bien ouvert le booster, il faut la renvoyer **avec le même `request_id`**. L'API répond alors avec **le même booster** (`"replayed": true`) au lieu d'en ouvrir un second.
 
 Le module le fait automatiquement : il fait jusqu'à 3 tentatives avec le même identifiant.
+
+### Donner une carte (pêche)
+
+Pour la pêche, **c'est le serveur du jeu qui tire la rareté** : il connaît les bonus du joueur (zone de pêche, canne, appât…). L'API pioche ensuite une carte de cette rareté dans le catalogue et l'ajoute à la collection.
+
+`POST /api/players/{userId}/cards`, requête :
+
+```json
+{
+  "rarity": "rare",
+  "source": "peche",
+  "request_id": "6f1c2a0e-5b8d-4c1e-9a77-0d3e2b1f4a55",
+  "roblox_username": "Pseudo"
+}
+```
+
+Réponse (extrait) :
+
+```json
+{
+  "success": true,
+  "replayed": false,
+  "grant_id": "…",
+  "source": "peche",
+  "player": { "roblox_user_id": "123456789", "new_player": false },
+  "card": {
+    "title": "Paris",
+    "rarity": "rare",
+    "rarity_display": "🔵 RARE",
+    "is_new": true,
+    "copies_owned": 1
+  }
+}
+```
+
+- `rarity` : `common`, `uncommon`, `rare`, `epic` ou `legendary`. Le joueur ne doit **jamais** pouvoir la choisir : elle est tirée côté serveur Roblox.
+- `source` : d'où vient la carte. Seule `peche` existe pour l'instant (liste `SOURCES` dans `API/services/reward_service.py`). Elle apparaît dans le libellé du mouvement de stock Dolibarr (`Peche #… - Roblox …`).
+- `request_id` est **obligatoire** et fonctionne comme pour les boosters : la même prise renvoyée deux fois ne donne qu'une carte.
+- Un booster pêché n'appelle pas l'API : il est ajouté au stock du joueur dans le jeu (`WikiBloxInventaire`).
+- **Limite** : 15 cartes par joueur et par minute (variable `CARD_GRANT_MAX_PER_MINUTE`), au-delà l'API répond `429`. C'est un filet de sécurité : une partie de pêche normale en est très loin.
 
 ## 4. Utilisation dans le jeu
 
@@ -230,6 +271,7 @@ end
 | `Secret 'wikiblox_game_key' introuvable` | Secret absent : ajouter un **Local Secret** en test Studio, ou un secret dans le dashboard pour les serveurs en ligne (§ 2.2) |
 | status `401` | En-tête `X-API-Key` absent |
 | status `403` | Mauvaise clé, ou domaine du secret différent de `wikiblox.omertilki.fr` |
-| status `422` | Données invalides, par exemple un `UserId` négatif en test *Local Server* |
+| status `422` | Données invalides, par exemple un `UserId` négatif en test *Local Server*, ou une rareté / source inconnue |
+| status `429` | Trop de cartes données au même joueur en une minute (`POST /api/players/{userId}/cards`) : le jeu appelle l'API trop souvent |
 | status `503` | Catalogue insuffisant pour une rareté, à recharger côté API (`POST /api/catalog/load`, clé admin), ou Dolibarr arrêté |
 | status `502` / `0` | API ou tunnel arrêté. Vérifier `https://wikiblox.omertilki.fr/health`, puis `docker logs wikicards_api` sur la machine hôte |
