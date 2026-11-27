@@ -22,6 +22,7 @@ local function frappe()
 	local perso = player.Character
 	local hum = perso and perso:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then return end
+	if perso:FindFirstChildOfClass("Tool") then return end -- outil en main (canne à pêche…) : pas de coup
 	dernier = os.clock()
 
 	local bras = prochainBras
