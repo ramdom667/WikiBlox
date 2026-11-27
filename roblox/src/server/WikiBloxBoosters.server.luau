@@ -3,6 +3,7 @@
 -- Crée ReplicatedStorage.WikiBloxRemotes avec trois RemoteFunction :
 --   ProbaBoosters:InvokeServer()                -> { success, boosters }
 --   OuvrirBooster:InvokeServer("standard")      -> { success, booster } ou { success = false, error }
+--     (chaque ouverture consomme un booster du stock du joueur : voir WikiBloxInventaire)
 --   MaCollection:InvokeServer()                 -> { success, collection } (collection = nil si vide)
 --
 -- Le client ne parle JAMAIS à l'API : il demande au serveur, qui vérifie puis appelle l'API.
@@ -11,7 +12,8 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local WikiCardsApi = require(script.Parent.WikiCardsApi)
+local WikiCardsApi = require(script.Parent:WaitForChild("WikiCardsApi"))
+local Inventaire = require(script.Parent:WaitForChild("WikiBloxInventaire"))
 
 local COOLDOWN = 3 -- secondes minimum entre deux appels d'un même joueur
 
@@ -92,13 +94,18 @@ openRemote.OnServerInvoke = function(player, boosterType)
 		return { success = false, error = "Patiente un instant" }
 	end
 
-	-- À FAIRE : vérifier et débiter la monnaie du jeu ICI, avant l'ouverture.
-	-- Pour un booster payant en Robux, passer par ProcessReceipt (voir roblox/API.md).
+	-- Chaque ouverture consomme un booster du stock (rendu si l'ouverture échoue)
+	local retire, raison = Inventaire.retirer(player)
+	if not retire then
+		release(player)
+		return { success = false, error = raison }
+	end
 
 	local ok, data = WikiCardsApi.openBooster(player, boosterType)
 	release(player)
 
 	if not ok then
+		Inventaire.ajouter(player, 1, true) -- on rend le booster
 		warn(("[WikiBlox] Ouverture échouée pour %s (%d) : %s %s"):format(
 			player.Name, player.UserId, tostring(data.status), tostring(data.message)))
 		return { success = false, error = "Ouverture impossible, réessaie plus tard" }

@@ -7,6 +7,9 @@
 -- Le joueur ouvre l'écran avec le bouton "Booster" (à gauche de l'écran)
 -- ou en s'approchant du booster géant au centre du lobby (touche E).
 -- Style commun : src/shared/WikiBloxStyle.luau
+--
+-- Stock de boosters : attributs Boosters / BoostersMax / ProchainBooster posés sur le joueur
+-- par ServerScriptService.Server.WikiBloxInventaire (affichés en sous-titre et sur le bouton du HUD).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,11 +50,11 @@ local F = Style.fenetre(gui, {
 })
 local contenu = F.contenu
 
-texte({
+local sousTitre = texte({
 	Name = "SousTitre",
 	Position = UDim2.fromScale(0.1, 0.02),
 	Size = UDim2.fromScale(0.8, 0.06),
-	Text = "5 cartes Wikipédia · la dernière est au minimum rare",
+	Text = "Chargement de tes boosters…",
 	Font = Enum.Font.GothamMedium,
 	TextColor3 = C.parcheminFonce,
 	TailleMax = 20,
@@ -418,6 +421,38 @@ local function afficherStatut(message, couleur)
 	statut.TextColor3 = couleur or C.blanc
 end
 
+-- Stock de boosters : sous-titre, pastille du HUD et bouton OUVRIR
+local function duree(secondes)
+	secondes = math.max(0, math.ceil(secondes))
+	return ("%d:%02d"):format(secondes // 60, secondes % 60)
+end
+
+local function majStock()
+	local stock = player:GetAttribute("Boosters")
+	local disponible = false
+	if player:GetAttribute("InventaireErreur") then
+		sousTitre.Text = "Sauvegarde indisponible, reviens un peu plus tard"
+	elseif stock == nil then
+		sousTitre.Text = "Chargement de tes boosters…"
+	else
+		local prochain = player:GetAttribute("ProchainBooster") or 0
+		local suite = prochain > 0 and ("prochain dans " .. duree(prochain - workspace:GetServerTimeNow())) or "stock plein"
+		sousTitre.Text = ("%d/%d boosters  ·  %s"):format(stock, player:GetAttribute("BoostersMax") or 10, suite)
+		disponible = stock > 0
+	end
+	HUD.pastille("Booster", stock)
+	if not occupe then
+		Style.activerBouton(boutonOuvrir, disponible)
+		if stock == 0 then
+			texteOuvrir.Text = "PLUS DE BOOSTER"
+		elseif disponible then
+			texteOuvrir.Text = dejaOuvert and "OUVRIR ENCORE" or "OUVRIR"
+		else
+			texteOuvrir.Text = "…"
+		end
+	end
+end
+
 local function ouvrirBooster()
 	if occupe then return end
 	occupe = true
@@ -472,9 +507,8 @@ local function ouvrirBooster()
 		dejaOuvert = true
 	end
 
-	texteOuvrir.Text = dejaOuvert and "OUVRIR ENCORE" or "OUVRIR"
-	Style.activerBouton(boutonOuvrir, true)
 	occupe = false
+	majStock()
 end
 
 ------------------------------------------------------------------
@@ -648,8 +682,12 @@ local function ouvrirEcran()
 		viderCartes()
 		remettrePaquet()
 		dejaOuvert = false
-		texteOuvrir.Text = "OUVRIR"
-		afficherStatut("Clique sur OUVRIR pour déchirer le paquet !", C.parcheminFonce)
+		majStock()
+		if player:GetAttribute("Boosters") == 0 then
+			afficherStatut("Reviens quand ton prochain booster sera prêt !", C.parcheminFonce)
+		else
+			afficherStatut("Clique sur OUVRIR pour déchirer le paquet !", C.parcheminFonce)
+		end
 	end
 	Style.ouvrir(F)
 end
@@ -707,4 +745,15 @@ task.spawn(function()
 	prompt.HoldDuration = 0.2
 	prompt.Parent = support
 	prompt.Triggered:Connect(ouvrirEcran)
+end)
+
+-- Mise à jour du stock (et du compte à rebours chaque seconde)
+for _, nom in ipairs({ "Boosters", "BoostersMax", "ProchainBooster", "InventaireErreur" }) do
+	player:GetAttributeChangedSignal(nom):Connect(majStock)
+end
+task.spawn(function()
+	while true do
+		majStock()
+		task.wait(1)
+	end
 end)

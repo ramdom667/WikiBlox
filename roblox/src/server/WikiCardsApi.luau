@@ -107,6 +107,18 @@ function WikiCardsApi.openBooster(player, boosterType, requestId)
 	})
 end
 
+-- Donne UNE carte de la rareté choisie par le serveur (pêche…). source : "peche".
+-- requestId : identifiant unique de CETTE récompense ; le réutiliser ne donne pas une seconde carte.
+-- Réponse : { card = { title, rarity, is_new, copies_owned, … }, … }
+function WikiCardsApi.grantCard(player, rarity, source, requestId)
+	return request("POST", "/api/players/" .. tostring(player.UserId) .. "/cards", {
+		rarity = rarity,
+		source = source,
+		request_id = requestId or HttpService:GenerateGUID(false),
+		roblox_username = player.Name,
+	})
+end
+
 -- Collection d'un joueur. Code 404 = le joueur n'a encore ouvert aucun booster.
 function WikiCardsApi.getCollection(userId)
 	return request("GET", "/api/players/" .. tostring(userId) .. "/collection")
