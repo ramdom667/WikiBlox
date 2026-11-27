@@ -17,6 +17,7 @@ from routes.simple import router as simple_router
 from routes.dolibarr import router as dolibarr_router
 from routes.catalog import router as catalog_router
 from routes.boosters import router as boosters_router, players_router
+from routes.rewards import router as rewards_router
 from security import require_admin_key
 
 # Swagger / ReDoc : désactivables en production (DOCS_ENABLED=false)
@@ -29,7 +30,7 @@ app = FastAPI(
         "API du jeu WikiBlox : catalogue de cartes Wikipédia (Dolibarr), boosters et collections des joueurs Roblox.\n\n"
         "Authentification : bouton **Authorize** puis la clé (en-tête `X-API-Key`)."
     ),
-    version="7.0.0",
+    version="7.1.0",
     docs_url="/docs" if DOCS_ENABLED else None,
     redoc_url="/redoc" if DOCS_ENABLED else None,
     openapi_url="/openapi.json" if DOCS_ENABLED else None
@@ -51,6 +52,7 @@ app.include_router(dolibarr_router)
 app.include_router(catalog_router)
 app.include_router(boosters_router)
 app.include_router(players_router)
+app.include_router(rewards_router)
 
 
 @app.get("/")
@@ -58,7 +60,7 @@ async def root():
     """Page d'accueil (publique)"""
     return {
         "message": "WikiCards API",
-        "version": "7.0.0",
+        "version": "7.1.0",
         "docs": "/docs" if DOCS_ENABLED else None,
         "health": "/health",
         "auth": "En-tête X-API-Key (clé de jeu ou clé d'administration)",
@@ -67,7 +69,8 @@ async def root():
                 "boosters": "GET /api/boosters",
                 "ouvrir": "POST /api/boosters/open",
                 "simuler": "GET /api/boosters/{type}/simulate",
-                "collection": "GET /api/players/{roblox_user_id}/collection"
+                "collection": "GET /api/players/{roblox_user_id}/collection",
+                "donner une carte": "POST /api/players/{roblox_user_id}/cards"
             },
             "admin (clé d'admin)": {
                 "catalogue": "/api/catalog/*",
@@ -86,7 +89,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "wikicards-structured",
-        "version": "7.0.0",
+        "version": "7.1.0",
         "environment": os.getenv("ENVIRONMENT", "development"),
         "wikipedia_user_agent": os.getenv("WIKIPEDIA_USER_AGENT", "non configuré")
     }
