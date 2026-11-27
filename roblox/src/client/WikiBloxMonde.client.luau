@@ -19,6 +19,7 @@ local HAUTEUR_NEXUS = 250 -- au-dessus de cette hauteur, on est dans le Nexus
 local NOMS_LIEUX = {
 	ArriveeNexus = "WikiVerse",
 	ArriveeCouloir = "LA BIBLIOTHÈQUE",
+	ArriveeParcours = "Le Parcours"
 }
 
 ------------------------------------------------------------------
