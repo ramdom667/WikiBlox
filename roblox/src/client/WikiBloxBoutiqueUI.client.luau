@@ -62,8 +62,8 @@ local OFFRES = {
 	},
 	{
 		id = "PassVIP",
-		titre = "PASS VIP",
-		description = "Boosters 2 fois plus rapides et un titre doré.",
+		titre = "GAMEPASS VIP",
+		description = "2x fois plus de chance sur les boosters.",
 		icone = "couronne",
 		couleur = C.violet,
 		prix = 30,
